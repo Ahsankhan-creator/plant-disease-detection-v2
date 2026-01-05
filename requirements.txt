@@ -14,8 +14,9 @@ httpx>=0.26.0
 Pillow>=10.4.0
 
 # Machine Learning
-# NOTE: For Vercel deployment we use Hugging Face Inference API for disease detection,
-# so we do NOT install torch/transformers (too large for serverless).
+# Local disease detection
+torch
+transformers
 
 # Pydantic
 pydantic>=2.5.3
@@ -25,7 +26,4 @@ aiofiles>=23.2.1
 
 # Additional utilities
 python-multipart>=0.0.6
-
-# Hugging Face client (lightweight). Helps keep inference working as HF endpoints evolve.
-huggingface-hub>=0.23.0
 

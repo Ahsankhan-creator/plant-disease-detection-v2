@@ -49,20 +49,18 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # ============================================
 # Plant Disease Detection Backend
 # ============================================
-# NOTE for Vercel:
-# - Bundling/installing torch + transformers often exceeds size/time limits.
-# - By default we use Hugging Face Inference API (set HF_API_TOKEN).
-# - To use the local model, set ENABLE_LOCAL_DISEASE_MODEL=true and install torch/transformers.
+# Normal (local) setup:
+# - Uses a local transformers image-classification model by default.
+# - No external API token is required for disease detection.
+# - If you want to disable local loading (e.g., limited environment), set ENABLE_LOCAL_DISEASE_MODEL=false.
 
-ENABLE_LOCAL_DISEASE_MODEL = os.getenv("ENABLE_LOCAL_DISEASE_MODEL", "false").lower() in ("1", "true", "yes")
-HF_API_TOKEN = os.getenv("HF_API_TOKEN", "")
+ENABLE_LOCAL_DISEASE_MODEL = os.getenv("ENABLE_LOCAL_DISEASE_MODEL", "true").lower() in ("1", "true", "yes")
 HF_MODEL_ID = os.getenv("HF_MODEL_ID", "mesabo/agri-plant-disease-resnet50")
-HF_INFERENCE_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL_ID}"
 
 disease_model = None
 disease_processor = None
 MODEL_LOADED = False
-DISEASE_BACKEND = "huggingface" if HF_API_TOKEN else "none"
+DISEASE_BACKEND = "local" if ENABLE_LOCAL_DISEASE_MODEL else "none"
 
 if ENABLE_LOCAL_DISEASE_MODEL:
     print("🌱 Loading local Plant Disease Detection Model...")
@@ -81,147 +79,7 @@ if ENABLE_LOCAL_DISEASE_MODEL:
         MODEL_LOADED = False
         disease_model = None
         disease_processor = None
-        DISEASE_BACKEND = "huggingface" if HF_API_TOKEN else "none"
-
-
-async def _hf_classify_image(image_bytes: bytes) -> list[dict]:
-    if not HF_API_TOKEN:
-        raise HTTPException(status_code=503, detail="HF_API_TOKEN is not configured for disease detection")
-
-    # Preferred path: use the official HF client which handles routing/provider changes.
-    # This avoids breakages when legacy endpoints return HTML/410.
-    try:
-        from huggingface_hub import AsyncInferenceClient  # type: ignore
-
-        client = AsyncInferenceClient(token=HF_API_TOKEN)
-        data = await client.image_classification(image_bytes, model=HF_MODEL_ID)
-
-        if isinstance(data, list):
-            predictions: list[dict] = []
-            for item in data:
-                if not isinstance(item, dict):
-                    continue
-                label = item.get("label")
-                score = item.get("score")
-                if label is None or score is None:
-                    continue
-                try:
-                    conf = round(float(score) * 100, 2)
-                except Exception:
-                    continue
-                predictions.append({"disease": str(label), "confidence": conf})
-
-            predictions.sort(key=lambda x: x.get("confidence", 0), reverse=True)
-            if predictions:
-                return predictions[:3]
-    except Exception:
-        # Fall back to raw HTTP below.
-        pass
-
-    def _looks_like_html(resp: httpx.Response) -> bool:
-        ct = (resp.headers.get("content-type") or "").lower()
-        if "text/html" in ct:
-            return True
-        text = (resp.text or "").lstrip().lower()
-        return text.startswith("<!doctype html") or text.startswith("<html")
-
-    def _short_error(resp: httpx.Response) -> str:
-        # Prefer JSON error when available; otherwise avoid returning full HTML.
-        try:
-            data = resp.json()
-            if isinstance(data, dict):
-                if "error" in data and isinstance(data.get("error"), str):
-                    return data["error"].strip()
-                if "message" in data and isinstance(data.get("message"), str):
-                    return data["message"].strip()
-                if "detail" in data and isinstance(data.get("detail"), str):
-                    return data["detail"].strip()
-        except Exception:
-            pass
-
-        if _looks_like_html(resp):
-            return "Received an HTML error page from Hugging Face (token/endpoint/model may be invalid or changed)."
-
-        text = (resp.text or "").strip()
-        if not text:
-            return "Empty response"
-        return text[:300]
-
-    # Hugging Face endpoints have changed over time; try multiple.
-    # NOTE: router endpoint expects the model id as a single URL segment.
-    from urllib.parse import quote
-
-    encoded_model = quote(HF_MODEL_ID, safe="")
-    urls: list[tuple[str, str]] = [
-        ("api-inference", HF_INFERENCE_URL),
-        ("router", f"https://router.huggingface.co/hf-inference/models/{encoded_model}"),
-    ]
-
-    headers = {
-        "Authorization": f"Bearer {HF_API_TOKEN}",
-        "Accept": "application/json",
-        "Content-Type": "application/octet-stream",
-        "User-Agent": "PlantGuardAI/1.0",
-    }
-
-    last_err = None
-    async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-        for name, url in urls:
-            resp = await client.post(url, headers=headers, content=image_bytes)
-
-            if resp.status_code == 200:
-                data = resp.json()
-                break
-
-            # If the model is cold-starting, Hugging Face often returns 503 with JSON.
-            if resp.status_code == 503:
-                try:
-                    j = resp.json()
-                    if isinstance(j, dict) and ("estimated_time" in j or "error" in j):
-                        est = j.get("estimated_time")
-                        if est is not None:
-                            raise HTTPException(
-                                status_code=503,
-                                detail=f"Hugging Face model is loading. Please try again in ~{est} seconds.",
-                            )
-                        raise HTTPException(status_code=503, detail=str(j.get("error") or "Model is loading"))
-                except HTTPException:
-                    raise
-                except Exception:
-                    pass
-
-            # 410/404 with HTML has been observed; try the fallback endpoint.
-            last_err = (name, resp.status_code, _short_error(resp))
-            continue
-
-        else:
-            if last_err:
-                name, status, msg = last_err
-                raise HTTPException(status_code=502, detail=f"Hugging Face inference error ({name}, {status}): {msg}")
-            raise HTTPException(status_code=502, detail="Hugging Face inference error: no response")
-
-    if isinstance(data, dict) and "error" in data:
-        raise HTTPException(status_code=502, detail=f"Hugging Face inference error: {data.get('error')}")
-    if not isinstance(data, list):
-        raise HTTPException(status_code=502, detail="Unexpected Hugging Face inference response")
-
-    # Expected: [{"label": "...", "score": 0.123}, ...]
-    predictions: list[dict] = []
-    for item in data:
-        if not isinstance(item, dict):
-            continue
-        label = item.get("label")
-        score = item.get("score")
-        if label is None or score is None:
-            continue
-        try:
-            conf = round(float(score) * 100, 2)
-        except Exception:
-            continue
-        predictions.append({"disease": str(label), "confidence": conf})
-
-    predictions.sort(key=lambda x: x.get("confidence", 0), reverse=True)
-    return predictions[:3]
+        DISEASE_BACKEND = "none"
 
 # ============================================
 # Pydantic Models
@@ -371,10 +229,10 @@ async def detect_disease(
     with_ai_advice: bool = Query(True, description="If true, also returns AI-generated advice")
 ):
     """Detect plant disease from uploaded image"""
-    if not MODEL_LOADED and not HF_API_TOKEN:
+    if not MODEL_LOADED:
         raise HTTPException(
             status_code=503,
-            detail="Disease detection is not configured. Set HF_API_TOKEN (recommended) or enable the local model.",
+            detail="Disease detection is not configured. Enable local model loading (ENABLE_LOCAL_DISEASE_MODEL=true) and install torch/transformers.",
         )
     
     try:
@@ -392,28 +250,28 @@ async def detect_disease(
         # Validate image is readable
         Image.open(io.BytesIO(image_data)).convert("RGB")
 
-        # Predict (local model if enabled, otherwise Hugging Face Inference API)
-        if MODEL_LOADED and disease_model is not None and disease_processor is not None:
-            import torch  # type: ignore
+        # Predict using the local model
+        if disease_model is None or disease_processor is None:
+            raise HTTPException(status_code=503, detail="Disease detection model is not loaded")
 
-            image = Image.open(io.BytesIO(image_data)).convert("RGB")
-            inputs = disease_processor(images=image, return_tensors="pt")
+        import torch  # type: ignore
 
-            with torch.no_grad():
-                outputs = disease_model(**inputs)
-                probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
-                top_probs, top_indices = torch.topk(probs[0], 3)
+        image = Image.open(io.BytesIO(image_data)).convert("RGB")
+        inputs = disease_processor(images=image, return_tensors="pt")
 
-                predictions = []
-                for prob, idx in zip(top_probs, top_indices):
-                    predictions.append(
-                        {
-                            "disease": disease_model.config.id2label[idx.item()],
-                            "confidence": round(prob.item() * 100, 2),
-                        }
-                    )
-        else:
-            predictions = await _hf_classify_image(image_data)
+        with torch.no_grad():
+            outputs = disease_model(**inputs)
+            probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
+            top_probs, top_indices = torch.topk(probs[0], 3)
+
+            predictions = []
+            for prob, idx in zip(top_probs, top_indices):
+                predictions.append(
+                    {
+                        "disease": disease_model.config.id2label[idx.item()],
+                        "confidence": round(prob.item() * 100, 2),
+                    }
+                )
 
         if not predictions:
             raise HTTPException(status_code=502, detail="Disease detection returned no predictions")
