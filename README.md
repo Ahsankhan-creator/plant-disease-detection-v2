@@ -65,7 +65,7 @@ An AI-powered smart farming application featuring weather prediction, plant dise
 5. **Open your browser:**
    Navigate to `http://localhost:5000/static/index.html`
 
-## 🔒 Keep API keys private (GitHub + Vercel)
+## 🔒 Keep API keys private (GitHub)
 
 Do **not** put API keys inside `config.py` as plain text. This project reads keys from environment variables.
 
@@ -75,26 +75,11 @@ Do **not** put API keys inside `config.py` as plain text. This project reads key
 - `WEATHER_API_KEY`
 - `ELEVENLABS_API_KEY`
 - `ELEVENLABS_VOICE_ID` (optional)
-- `HF_API_TOKEN` (recommended for disease detection on Vercel)
 - `HF_MODEL_ID` (optional, default is `mesabo/agri-plant-disease-resnet50`)
 
-### Vercel setup
+Disease detection runs locally by default and requires `torch` + `transformers`.
 
-1) Push the project to GitHub (safe now because secrets are not committed).
-2) In Vercel: **Project → Settings → Environment Variables**, add the keys above.
-3) Deploy.
-
-If you ever committed keys in the past, delete them from git history (or create a fresh repo) before making the repo public.
-
-## ☁️ Deploy on Vercel (FastAPI)
-
-This repo includes:
-- `api/index.py` (Vercel function entry)
-- `vercel.json`
-
-After deployment:
-- UI: `/static/index.html`
-- API: `/api/*`
+If you ever committed keys in the past, rotate them and remove them from git history (or create a fresh repo) before making the repo public.
 
 ## 📁 Project Structure
 
