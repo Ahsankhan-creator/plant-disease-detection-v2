@@ -88,14 +88,84 @@ async def _hf_classify_image(image_bytes: bytes) -> list[dict]:
     if not HF_API_TOKEN:
         raise HTTPException(status_code=503, detail="HF_API_TOKEN is not configured for disease detection")
 
-    headers = {"Authorization": f"Bearer {HF_API_TOKEN}"}
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.post(HF_INFERENCE_URL, headers=headers, content=image_bytes)
+    def _looks_like_html(resp: httpx.Response) -> bool:
+        ct = (resp.headers.get("content-type") or "").lower()
+        if "text/html" in ct:
+            return True
+        text = (resp.text or "").lstrip().lower()
+        return text.startswith("<!doctype html") or text.startswith("<html")
 
-    if resp.status_code != 200:
-        raise HTTPException(status_code=resp.status_code, detail=f"Hugging Face inference error: {resp.text}")
+    def _short_error(resp: httpx.Response) -> str:
+        # Prefer JSON error when available; otherwise avoid returning full HTML.
+        try:
+            data = resp.json()
+            if isinstance(data, dict):
+                if "error" in data and isinstance(data.get("error"), str):
+                    return data["error"].strip()
+                if "message" in data and isinstance(data.get("message"), str):
+                    return data["message"].strip()
+                if "detail" in data and isinstance(data.get("detail"), str):
+                    return data["detail"].strip()
+        except Exception:
+            pass
 
-    data = resp.json()
+        if _looks_like_html(resp):
+            return "Received an HTML error page from Hugging Face (token/endpoint/model may be invalid or changed)."
+
+        text = (resp.text or "").strip()
+        if not text:
+            return "Empty response"
+        return text[:300]
+
+    # Hugging Face endpoints have changed over time; try both.
+    urls: list[tuple[str, str]] = [
+        ("api-inference", HF_INFERENCE_URL),
+        ("router", f"https://router.huggingface.co/hf-inference/models/{HF_MODEL_ID}"),
+    ]
+
+    headers = {
+        "Authorization": f"Bearer {HF_API_TOKEN}",
+        "Accept": "application/json",
+        "Content-Type": "application/octet-stream",
+        "User-Agent": "PlantGuardAI/1.0",
+    }
+
+    last_err = None
+    async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+        for name, url in urls:
+            resp = await client.post(url, headers=headers, content=image_bytes)
+
+            if resp.status_code == 200:
+                data = resp.json()
+                break
+
+            # If the model is cold-starting, Hugging Face often returns 503 with JSON.
+            if resp.status_code == 503:
+                try:
+                    j = resp.json()
+                    if isinstance(j, dict) and ("estimated_time" in j or "error" in j):
+                        est = j.get("estimated_time")
+                        if est is not None:
+                            raise HTTPException(
+                                status_code=503,
+                                detail=f"Hugging Face model is loading. Please try again in ~{est} seconds.",
+                            )
+                        raise HTTPException(status_code=503, detail=str(j.get("error") or "Model is loading"))
+                except HTTPException:
+                    raise
+                except Exception:
+                    pass
+
+            # 410/404 with HTML has been observed; try the fallback endpoint.
+            last_err = (name, resp.status_code, _short_error(resp))
+            continue
+
+        else:
+            if last_err:
+                name, status, msg = last_err
+                raise HTTPException(status_code=502, detail=f"Hugging Face inference error ({name}, {status}): {msg}")
+            raise HTTPException(status_code=502, detail="Hugging Face inference error: no response")
+
     if isinstance(data, dict) and "error" in data:
         raise HTTPException(status_code=502, detail=f"Hugging Face inference error: {data.get('error')}")
     if not isinstance(data, list):
