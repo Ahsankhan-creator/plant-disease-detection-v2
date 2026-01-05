@@ -26,3 +26,6 @@ aiofiles>=23.2.1
 # Additional utilities
 python-multipart>=0.0.6
 
+# Hugging Face client (lightweight). Helps keep inference working as HF endpoints evolve.
+huggingface-hub>=0.23.0
+

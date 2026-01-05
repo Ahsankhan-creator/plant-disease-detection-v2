@@ -88,6 +88,36 @@ async def _hf_classify_image(image_bytes: bytes) -> list[dict]:
     if not HF_API_TOKEN:
         raise HTTPException(status_code=503, detail="HF_API_TOKEN is not configured for disease detection")
 
+    # Preferred path: use the official HF client which handles routing/provider changes.
+    # This avoids breakages when legacy endpoints return HTML/410.
+    try:
+        from huggingface_hub import AsyncInferenceClient  # type: ignore
+
+        client = AsyncInferenceClient(token=HF_API_TOKEN)
+        data = await client.image_classification(image_bytes, model=HF_MODEL_ID)
+
+        if isinstance(data, list):
+            predictions: list[dict] = []
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                label = item.get("label")
+                score = item.get("score")
+                if label is None or score is None:
+                    continue
+                try:
+                    conf = round(float(score) * 100, 2)
+                except Exception:
+                    continue
+                predictions.append({"disease": str(label), "confidence": conf})
+
+            predictions.sort(key=lambda x: x.get("confidence", 0), reverse=True)
+            if predictions:
+                return predictions[:3]
+    except Exception:
+        # Fall back to raw HTTP below.
+        pass
+
     def _looks_like_html(resp: httpx.Response) -> bool:
         ct = (resp.headers.get("content-type") or "").lower()
         if "text/html" in ct:
@@ -117,10 +147,14 @@ async def _hf_classify_image(image_bytes: bytes) -> list[dict]:
             return "Empty response"
         return text[:300]
 
-    # Hugging Face endpoints have changed over time; try both.
+    # Hugging Face endpoints have changed over time; try multiple.
+    # NOTE: router endpoint expects the model id as a single URL segment.
+    from urllib.parse import quote
+
+    encoded_model = quote(HF_MODEL_ID, safe="")
     urls: list[tuple[str, str]] = [
         ("api-inference", HF_INFERENCE_URL),
-        ("router", f"https://router.huggingface.co/hf-inference/models/{HF_MODEL_ID}"),
+        ("router", f"https://router.huggingface.co/hf-inference/models/{encoded_model}"),
     ]
 
     headers = {
