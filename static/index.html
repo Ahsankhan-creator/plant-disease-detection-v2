@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PlantGuard AI - Smart Farming Assistant</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="logo">
+                <i class="fas fa-leaf"></i>
+                <span>PlantGuard AI</span>
+            </div>
+            <nav class="nav">
+                <a href="#weather" class="nav-link active"><i class="fas fa-cloud-sun"></i> Weather</a>
+                <a href="#disease" class="nav-link"><i class="fas fa-bug"></i> Disease Detection</a>
+                <a href="#irrigation" class="nav-link"><i class="fas fa-tint"></i> Irrigation</a>
+                <a href="#chat" class="nav-link"><i class="fas fa-robot"></i> Crop Doctor</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <h1><i class="fas fa-seedling"></i> Smart Farming Assistant</h1>
+            <p>AI-Powered Irrigation • Weather Prediction • Disease Detection • Voice-Enabled Crop Doctor</p>
+        </div>
+    </section>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="container">
+            <!-- Weather Section -->
+            <section id="weather" class="card">
+                <div class="card-header">
+                    <h2><i class="fas fa-cloud-sun"></i> Weather & Forecast</h2>
+                </div>
+                <div class="card-body">
+                    <div class="weather-input">
+                        <input type="text" id="locationInput" placeholder="Enter city name (e.g., New York)" value="New York">
+                        <button id="getWeatherBtn" class="btn btn-primary">
+                            <i class="fas fa-search"></i> Get Weather
+                        </button>
+                    </div>
+                    
+                    <div id="weatherResult" class="weather-result hidden">
+                        <div class="current-weather">
+                            <div class="weather-main">
+                                <img id="weatherIcon" src="" alt="Weather">
+                                <div class="weather-temp">
+                                    <span id="temperature">--</span>°C
+                                </div>
+                            </div>
+                            <div class="weather-info">
+                                <h3 id="locationName">--</h3>
+                                <p id="weatherDescription">--</p>
+                            </div>
+                        </div>
+                        <div class="weather-details">
+                            <div class="detail-item">
+                                <i class="fas fa-thermometer-half"></i>
+                                <span>Feels Like</span>
+                                <strong id="feelsLike">--°C</strong>
+                            </div>
+                            <div class="detail-item">
+                                <i class="fas fa-tint"></i>
+                                <span>Humidity</span>
+                                <strong id="humidity">--%</strong>
+                            </div>
+                            <div class="detail-item">
+                                <i class="fas fa-wind"></i>
+                                <span>Wind</span>
+                                <strong id="windSpeed">-- m/s</strong>
+                            </div>
+                            <div class="detail-item">
+                                <i class="fas fa-eye"></i>
+                                <span>Visibility</span>
+                                <strong id="visibility">-- km</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="forecastResult" class="forecast-result hidden">
+                        <h3><i class="fas fa-calendar-alt"></i> 5-Day Forecast</h3>
+                        <div id="forecastCards" class="forecast-cards"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Disease Detection Section -->
+            <section id="disease" class="card">
+                <div class="card-header">
+                    <h2><i class="fas fa-microscope"></i> Plant Disease Detection</h2>
+                </div>
+                <div class="card-body">
+                    <div class="upload-area" id="uploadArea">
+                        <input type="file" id="diseaseImage" accept="image/*" hidden>
+                        <div class="upload-content">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <p>Drag & drop a plant leaf image or <span class="browse-link">browse</span></p>
+                            <small>Supports: JPG, PNG, WEBP</small>
+                        </div>
+                    </div>
+                    
+                    <div id="imagePreview" class="image-preview hidden">
+                        <img id="previewImg" src="" alt="Preview">
+                        <button id="removeImage" class="btn-icon"><i class="fas fa-times"></i></button>
+                    </div>
+
+                    <button id="detectDiseaseBtn" class="btn btn-success" disabled>
+                        <i class="fas fa-search-plus"></i> Analyze Plant
+                    </button>
+
+                    <div id="diseaseResult" class="disease-result hidden">
+                        <div class="result-header">
+                            <i class="fas fa-clipboard-check"></i>
+                            <h3>Analysis Result</h3>
+                        </div>
+                        <div class="result-body">
+                            <div class="disease-main">
+                                <span id="diseaseStatus" class="status-badge">--</span>
+                                <h4 id="diseaseName">--</h4>
+                                <div class="confidence-bar">
+                                    <div id="confidenceBar" class="confidence-fill"></div>
+                                </div>
+                                <p id="confidenceText">Confidence: --%</p>
+                            </div>
+                            <div id="topPredictions" class="top-predictions"></div>
+
+                            <div id="aiAdvicePanel" class="ai-advice hidden">
+                                <div class="ai-advice-header">
+                                    <i class="fas fa-stethoscope"></i>
+                                    <h4>AI Treatment / Prevention Advice</h4>
+                                </div>
+                                <div id="aiAdviceStatus" class="ai-advice-status"></div>
+                                <div id="aiAdviceText" class="ai-advice-text"></div>
+                                <div class="ai-advice-actions">
+                                    <button id="speakAdviceBtn" class="btn btn-voice" type="button">
+                                        <i class="fas fa-volume-up"></i> Read Advice
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <button id="speakDiseaseBtn" class="btn btn-voice">
+                            <i class="fas fa-volume-up"></i> Read Aloud
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Irrigation Section -->
+            <section id="irrigation" class="card">
+                <div class="card-header">
+                    <h2><i class="fas fa-tint"></i> Smart Irrigation Advisor</h2>
+                </div>
+                <div class="card-body">
+                    <div class="irrigation-form">
+                        <div class="form-group">
+                            <label><i class="fas fa-leaf"></i> Crop Type</label>
+                            <select id="cropType">
+                                <option value="tomato">🍅 Tomato</option>
+                                <option value="corn">🌽 Corn</option>
+                                <option value="wheat">🌾 Wheat</option>
+                                <option value="rice">🍚 Rice</option>
+                                <option value="potato">🥔 Potato</option>
+                                <option value="cotton">🧶 Cotton</option>
+                                <option value="soybean">🫘 Soybean</option>
+                                <option value="vegetables" selected>🥬 Vegetables</option>
+                                <option value="fruits">🍎 Fruits</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-water"></i> Soil Moisture (%)</label>
+                            <input type="range" id="soilMoisture" min="0" max="100" value="50">
+                            <span id="moistureValue">50%</span>
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-clock"></i> Hours Since Last Watering</label>
+                            <input type="number" id="lastWatered" min="0" max="168" value="24">
+                        </div>
+                        <div class="form-group checkbox-group">
+                            <input type="checkbox" id="useWeatherData" checked>
+                            <label for="useWeatherData">Use current weather data</label>
+                        </div>
+                    </div>
+
+                    <button id="getIrrigationBtn" class="btn btn-primary">
+                        <i class="fas fa-calculator"></i> Get Recommendation
+                    </button>
+
+                    <div id="irrigationResult" class="irrigation-result hidden">
+                        <div class="irrigation-score">
+                            <div class="score-circle">
+                                <svg viewBox="0 0 100 100">
+                                    <circle class="score-bg" cx="50" cy="50" r="45"/>
+                                    <circle id="scoreCircle" class="score-fill" cx="50" cy="50" r="45"/>
+                                </svg>
+                                <div class="score-text">
+                                    <span id="irrigationScore">0</span>
+                                    <small>Need Score</small>
+                                </div>
+                            </div>
+                            <div id="irrigationAction" class="irrigation-action">--</div>
+                        </div>
+                        <div id="irrigationRecommendations" class="recommendations-list"></div>
+                        <div id="cropAdvice" class="crop-advice"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Chat Section -->
+            <section id="chat" class="card chat-card">
+                <div class="card-header">
+                    <h2><i class="fas fa-robot"></i> AI Crop Doctor</h2>
+                    <span class="badge">Voice Enabled</span>
+                </div>
+                <div class="card-body">
+                    <div id="chatMessages" class="chat-messages">
+                        <div class="message bot-message">
+                            <div class="message-avatar"><i class="fas fa-robot"></i></div>
+                            <div class="message-content">
+                                <p>Hello! I'm your AI Crop Doctor. 🌱</p>
+                                <p>I can help you with:</p>
+                                <ul>
+                                    <li>Plant disease diagnosis & treatment</li>
+                                    <li>Irrigation and watering advice</li>
+                                    <li>Pest control recommendations</li>
+                                    <li>Crop management tips</li>
+                                </ul>
+                                <p>How can I assist you today?</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="chat-input-area">
+                        <div class="input-wrapper">
+                            <input type="text" id="chatInput" placeholder="Ask about your crops, diseases, pests...">
+                            <button id="voiceInputBtn" class="btn-icon voice-btn" title="Voice Input">
+                                <i class="fas fa-microphone"></i>
+                            </button>
+                        </div>
+                        <button id="sendMessageBtn" class="btn btn-primary">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="chat-options">
+                        <button class="quick-btn" data-message="How do I prevent tomato blight?">
+                            <i class="fas fa-shield-virus"></i> Prevent Blight
+                        </button>
+                        <button class="quick-btn" data-message="What are signs of overwatering?">
+                            <i class="fas fa-tint-slash"></i> Overwatering Signs
+                        </button>
+                        <button class="quick-btn" data-message="How to improve soil health naturally?">
+                            <i class="fas fa-mountain"></i> Soil Health
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 PlantGuard AI - Smart Farming Assistant</p>
+            <p>Powered by AI • Made with <i class="fas fa-heart"></i> for Farmers</p>
+        </div>
+    </footer>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="loader">
+            <i class="fas fa-seedling fa-spin"></i>
+            <p id="loadingText">Processing...</p>
+        </div>
+    </div>
+
+    <!-- Audio Player (hidden) -->
+    <audio id="ttsAudio" hidden></audio>
+
+    <script src="script.js"></script>
+</body>
+</html>

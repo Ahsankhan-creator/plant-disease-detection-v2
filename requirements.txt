@@ -1,0 +1,27 @@
+# ============================================
+# PlantGuard AI - Smart Farming Assistant
+# Requirements
+# ============================================
+
+# Web Framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# HTTP Client
+httpx>=0.26.0
+
+# Image Processing
+Pillow>=10.4.0
+
+# Machine Learning
+# NOTE: For Vercel deployment we use Hugging Face Inference API for disease detection,
+# so we do NOT install torch/transformers (too large for serverless).
+
+# Pydantic
+pydantic>=2.5.3
+
+# Static Files
+aiofiles>=23.2.1
+
+# Additional utilities
+python-multipart>=0.0.6
